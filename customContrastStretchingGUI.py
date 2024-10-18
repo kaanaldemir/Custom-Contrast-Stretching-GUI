@@ -49,6 +49,9 @@ class ImageProcessorApp:
             "Grayscale No Green Custom Stretch"
         ]
 
+        self.current_red_coeff = 0.299
+        self.current_blue_coeff = 0.114
+
         self.setup_ui()
 
     def setup_ui(self):
@@ -73,6 +76,37 @@ class ImageProcessorApp:
             font=("Arial", 12)
         )
         indicator_label.pack(side=tk.LEFT, padx=20)
+
+        sliders_frame = tk.Frame(top_frame)
+        sliders_frame.pack(side=tk.LEFT, padx=20)
+
+        red_label = tk.Label(sliders_frame, text="Red Coefficient:", font=("Arial", 10))
+        red_label.pack()
+        self.red_scale = tk.Scale(
+            sliders_frame,
+            from_=0,
+            to=1000,
+            orient=tk.HORIZONTAL,
+            resolution=1,
+            command=self.update_grayscale_no_g,
+            length=200
+        )
+        self.red_scale.set(int(self.current_red_coeff * 1000))
+        self.red_scale.pack()
+
+        blue_label = tk.Label(sliders_frame, text="Blue Coefficient:", font=("Arial", 10))
+        blue_label.pack()
+        self.blue_scale = tk.Scale(
+            sliders_frame,
+            from_=0,
+            to=1000,
+            orient=tk.HORIZONTAL,
+            resolution=1,
+            command=self.update_grayscale_no_g,
+            length=200
+        )
+        self.blue_scale.set(int(self.current_blue_coeff * 1000))
+        self.blue_scale.pack()
 
         control_frame = tk.Frame(self.root)
         control_frame.pack(pady=10)
@@ -187,9 +221,9 @@ class ImageProcessorApp:
         self.gray_no_g_image = self.original_image.convert(
             "L",
             (
-                0.299,
+                self.current_red_coeff,
                 0.0,
-                0.114,
+                self.current_blue_coeff,
                 0
             )
         )
@@ -248,14 +282,7 @@ class ImageProcessorApp:
         elif threshold <= 0:
             return image
         else:
-            lut = []
-            for i in range(256):
-                if i < threshold:
-                    lut.append(0)
-                else:
-                    stretched = int((i - threshold) * 255 / (255 - threshold))
-                    stretched = min(stretched, 255)
-                    lut.append(stretched)
+            lut = [0 if i < threshold else min(int((i - threshold) * 255 / (255 - threshold)), 255) for i in range(256)]
             return image.point(lut)
 
     def display_custom_stretched_images(self):
@@ -274,6 +301,38 @@ class ImageProcessorApp:
             self.all_labels[label_idx].image = photo
             self.all_labels[label_idx].bind("<Button-1>", lambda e, im=img: self.show_fullscreen(im))
             self.all_labels[label_idx].bind("<Button-3>", lambda e, im=img, idx=label_idx: self.save_image(im, idx))
+
+    def update_grayscale_no_g(self, event=None):
+        red_val = self.red_scale.get() / 1000
+        blue_val = self.blue_scale.get() / 1000
+        self.current_red_coeff = red_val
+        self.current_blue_coeff = blue_val
+        self.gray_no_g_image = self.original_image.convert(
+            "L",
+            (
+                self.current_red_coeff,
+                0.0,
+                self.current_blue_coeff,
+                0
+            )
+        )
+        self.gray_no_g_normalized = ImageOps.autocontrast(self.gray_no_g_image)
+        threshold = self.threshold_var.get()
+        self.gray_no_g_custom = self.custom_contrast_stretch(self.gray_no_g_normalized, threshold)
+        img_resized = self.resize_image(self.gray_no_g_image, 250, 300)
+        photo = ImageTk.PhotoImage(img_resized)
+        self.all_labels[4].configure(image=photo)
+        self.all_labels[4].image = photo
+        img_resized_norm = self.resize_image(self.gray_no_g_normalized, 250, 300)
+        photo_norm = ImageTk.PhotoImage(img_resized_norm)
+        self.all_labels[9].configure(image=photo_norm)
+        self.all_labels[9].image = photo_norm
+        img_resized_custom = self.resize_image(self.gray_no_g_custom, 250, 300)
+        photo_custom = ImageTk.PhotoImage(img_resized_custom)
+        self.all_labels[14].configure(image=photo_custom)
+        self.all_labels[14].image = photo_custom
+        self.all_labels[14].bind("<Button-1>", lambda e, im=self.gray_no_g_custom: self.show_fullscreen(im))
+        self.all_labels[14].bind("<Button-3>", lambda e, im=self.gray_no_g_custom, idx=14: self.save_image(im, idx))
 
     def show_fullscreen(self, image):
         if self.fullscreen_window and self.fullscreen_image == image:
@@ -304,7 +363,11 @@ class ImageProcessorApp:
             self.fullscreen_image = None
 
     def save_image(self, image, idx):
-        default_name = self.image_titles[idx] + ".png"
+        title = self.image_titles[idx]
+        if idx in [4, 9, 14]:
+            default_name = f"{title}_R{self.current_red_coeff}_B{self.current_blue_coeff}.png"
+        else:
+            default_name = f"{title}.png"
         file_path = filedialog.asksaveasfilename(
             initialfile=default_name,
             defaultextension=".png",
