@@ -16,9 +16,13 @@ class ImageProcessorApp:
             "secondary_bg": "#3c3c3c",     # Slightly Lighter Gray
             "accent_blue": "#61afef",      # Soft Blue
             "accent_purple": "#c678dd",    # Soft Purple
+            "green": "#98c379",            # Soft Green
+            "red": "#e06c75",              # Soft Red
+            "blue": "#61afef",             # Soft Blue (same as accent_blue for consistency)
+            "purple": "#c678dd",           # Soft Purple for Grayscale No Green
             "text": "#ffffff",             # White
             "sub_text": "#abb2bf",         # Light Gray
-            "warning": "#e06c75"            # Soft Red
+            "warning": "#e06c75"           # Soft Red (same as "red" for consistency)
         }
 
         # Apply dark theme to root window
@@ -83,8 +87,8 @@ class ImageProcessorApp:
             "Grayscale No Green Custom Stretch"
         ]
 
-        self.current_red_coeff = 0.299
-        self.current_blue_coeff = 0.114
+        self.current_red_coeff = 0.500
+        self.current_blue_coeff = 0.500
 
         self.num_columns = 5  # Define number of columns before setup_ui
         self.setup_ui()
@@ -133,7 +137,7 @@ class ImageProcessorApp:
         )
         self.red_scale.set(int(self.current_red_coeff * 1000))
         self.red_scale.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        self.red_value_label = ttk.Label(sliders_frame, text=f"{self.red_scale.get():.0f}", font=("Arial", 10), foreground=self.colors["accent_blue"])
+        self.red_value_label = ttk.Label(sliders_frame, text=f"{self.red_scale.get():.0f}", font=("Arial", 10), foreground=self.colors["red"])
         self.red_value_label.grid(row=0, column=2, padx=5, pady=5, sticky="w")
 
         # Blue Coefficient Slider
@@ -149,7 +153,7 @@ class ImageProcessorApp:
         )
         self.blue_scale.set(int(self.current_blue_coeff * 1000))
         self.blue_scale.grid(row=1, column=1, padx=5, pady=5, sticky="w")
-        self.blue_value_label = ttk.Label(sliders_frame, text=f"{self.blue_scale.get():.0f}", font=("Arial", 10), foreground=self.colors["accent_purple"])
+        self.blue_value_label = ttk.Label(sliders_frame, text=f"{self.blue_scale.get():.0f}", font=("Arial", 10), foreground=self.colors["blue"])
         self.blue_value_label.grid(row=1, column=2, padx=5, pady=5, sticky="w")
 
         # Warning Label with fixed row height to prevent layout shift
@@ -209,17 +213,20 @@ class ImageProcessorApp:
             "Grayscale No Green Custom Stretch"
         ]
 
-        # Add titles
+        # Add titles with color-coded text
         for col, title in enumerate(original_titles):
-            title_label = ttk.Label(self.image_frame, text=title, font=("Arial", 10, "bold"), foreground=self.colors["accent_blue"])
+            fg_color = self.get_title_color(title)
+            title_label = ttk.Label(self.image_frame, text=title, font=("Arial", 10, "bold"), foreground=fg_color)
             title_label.grid(row=0, column=col, padx=5, pady=5)
 
         for col, title in enumerate(normalized_titles):
-            title_label = ttk.Label(self.image_frame, text=title, font=("Arial", 10, "bold"), foreground=self.colors["accent_purple"])
+            fg_color = self.get_title_color(title)
+            title_label = ttk.Label(self.image_frame, text=title, font=("Arial", 10, "bold"), foreground=fg_color)
             title_label.grid(row=2, column=col, padx=5, pady=5)
 
         for col, title in enumerate(custom_titles):
-            title_label = ttk.Label(self.image_frame, text=title, font=("Arial", 10, "bold"), foreground=self.colors["accent_blue"])
+            fg_color = self.get_title_color(title)
+            title_label = ttk.Label(self.image_frame, text=title, font=("Arial", 10, "bold"), foreground=fg_color)
             title_label.grid(row=4, column=col, padx=5, pady=5)
 
         # Create image labels using tk.Label for better alignment control
@@ -228,6 +235,21 @@ class ImageProcessorApp:
                 label = tk.Label(self.image_frame, relief="solid", anchor='center', bg=self.colors["secondary_bg"], bd=2, highlightthickness=0)
                 label.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
                 self.all_labels.append(label)
+
+    def get_title_color(self, title):
+        """
+        Determine the color of the title based on its text.
+        """
+        if "Grayscale No Green" in title:
+            return self.colors["purple"]
+        elif "Green" in title:
+            return self.colors["green"]
+        elif "Red" in title:
+            return self.colors["red"]
+        elif "Blue" in title:
+            return self.colors["blue"]
+        else:
+            return self.colors["text"]
 
     def load_image(self):
         file_path = filedialog.askopenfilename(
@@ -359,9 +381,9 @@ class ImageProcessorApp:
         threshold = self.threshold_var.get()
         self.gray_no_g_custom = self.custom_contrast_stretch(self.gray_no_g_normalized, threshold)
 
-        # Update Red and Blue value labels
-        self.red_value_label.config(text=f"{self.red_scale.get():.0f}", foreground=self.colors["accent_blue"])
-        self.blue_value_label.config(text=f"{self.blue_scale.get():.0f}", foreground=self.colors["accent_purple"])
+        # Update Red and Blue value labels with appropriate colors
+        self.red_value_label.config(text=f"{self.red_scale.get():.0f}", foreground=self.colors["red"])
+        self.blue_value_label.config(text=f"{self.blue_scale.get():.0f}", foreground=self.colors["blue"])
 
         # Update "Grayscale No Green" original image
         img_resized = self.resize_image(self.gray_no_g_image, 250, 250)
