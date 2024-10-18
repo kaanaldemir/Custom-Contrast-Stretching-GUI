@@ -6,7 +6,7 @@ class ImageProcessorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Fundus Image Processor")
-        self.root.geometry("2000x1600")
+        self.root.geometry("2200x1800")
         self.root.resizable(False, False)
 
         self.original_image = None
@@ -108,6 +108,9 @@ class ImageProcessorApp:
         self.blue_scale.set(int(self.current_blue_coeff * 1000))
         self.blue_scale.pack()
 
+        self.warning_label = tk.Label(sliders_frame, text="", font=("Arial", 10), fg="red")
+        self.warning_label.pack(pady=5)
+
         control_frame = tk.Frame(self.root)
         control_frame.pack(pady=10)
 
@@ -121,24 +124,13 @@ class ImageProcessorApp:
             to=255,
             orient=tk.HORIZONTAL,
             variable=self.threshold_var,
+            command=self.apply_custom_stretch,
             length=300,
             tickinterval=50,
             label="Threshold",
             font=("Arial", 10)
         )
         threshold_scale.pack(side=tk.LEFT, padx=5)
-
-        apply_button = tk.Button(
-            control_frame,
-            text="Apply Custom Stretch",
-            command=self.apply_custom_stretch,
-            bg="green",
-            fg="white",
-            font=("Arial", 12),
-            padx=10,
-            pady=5
-        )
-        apply_button.pack(side=tk.LEFT, padx=10)
 
         self.image_frame = tk.Frame(self.root)
         self.image_frame.pack(pady=10)
@@ -210,7 +202,7 @@ class ImageProcessorApp:
 
         self.process_images()
         self.display_images()
-        self.reset_custom_stretched_images()
+        self.update_warning_label()
         self.apply_custom_stretch()
 
     def process_images(self):
@@ -262,9 +254,8 @@ class ImageProcessorApp:
             label.configure(image='')
             label.image = None
 
-    def apply_custom_stretch(self):
+    def apply_custom_stretch(self, event=None):
         if not self.original_image:
-            messagebox.showwarning("No Image Loaded", "Please load an image before applying custom stretch.")
             return
 
         threshold = self.threshold_var.get()
@@ -319,20 +310,39 @@ class ImageProcessorApp:
         self.gray_no_g_normalized = ImageOps.autocontrast(self.gray_no_g_image)
         threshold = self.threshold_var.get()
         self.gray_no_g_custom = self.custom_contrast_stretch(self.gray_no_g_normalized, threshold)
+
+        # Update "Grayscale No Green" original image
         img_resized = self.resize_image(self.gray_no_g_image, 250, 300)
         photo = ImageTk.PhotoImage(img_resized)
         self.all_labels[4].configure(image=photo)
         self.all_labels[4].image = photo
+        self.all_labels[4].bind("<Button-1>", lambda e, im=self.gray_no_g_image: self.show_fullscreen(im))
+        self.all_labels[4].bind("<Button-3>", lambda e, im=self.gray_no_g_image, idx=4: self.save_image(im, idx))
+
+        # Update "Grayscale No Green Normalized" image
         img_resized_norm = self.resize_image(self.gray_no_g_normalized, 250, 300)
         photo_norm = ImageTk.PhotoImage(img_resized_norm)
         self.all_labels[9].configure(image=photo_norm)
         self.all_labels[9].image = photo_norm
+        self.all_labels[9].bind("<Button-1>", lambda e, im=self.gray_no_g_normalized: self.show_fullscreen(im))
+        self.all_labels[9].bind("<Button-3>", lambda e, im=self.gray_no_g_normalized, idx=9: self.save_image(im, idx))
+
+        # Update "Grayscale No Green Custom Stretch" image
         img_resized_custom = self.resize_image(self.gray_no_g_custom, 250, 300)
         photo_custom = ImageTk.PhotoImage(img_resized_custom)
         self.all_labels[14].configure(image=photo_custom)
         self.all_labels[14].image = photo_custom
         self.all_labels[14].bind("<Button-1>", lambda e, im=self.gray_no_g_custom: self.show_fullscreen(im))
         self.all_labels[14].bind("<Button-3>", lambda e, im=self.gray_no_g_custom, idx=14: self.save_image(im, idx))
+
+        self.update_warning_label()
+
+    def update_warning_label(self):
+        total = self.red_scale.get() + self.blue_scale.get()
+        if total > 1000:
+            self.warning_label.config(text="Warning: Red + Blue coefficients exceed 1000!", fg="red")
+        else:
+            self.warning_label.config(text="", fg="red")
 
     def show_fullscreen(self, image):
         if self.fullscreen_window and self.fullscreen_image == image:
@@ -365,7 +375,9 @@ class ImageProcessorApp:
     def save_image(self, image, idx):
         title = self.image_titles[idx]
         if idx in [4, 9, 14]:
-            default_name = f"{title}_R{self.current_red_coeff}_B{self.current_blue_coeff}.png"
+            red = f"{self.current_red_coeff:.3f}"
+            blue = f"{self.current_blue_coeff:.3f}"
+            default_name = f"{title}_R{red}_B{blue}.png"
         else:
             default_name = f"{title}.png"
         file_path = filedialog.asksaveasfilename(
