@@ -11,9 +11,9 @@ logging.basicConfig(filename='app.log', level=logging.INFO,
 class ImageProcessorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Fundus Image Processor")
-        self.root.geometry("1600x900")  # Increased width to accommodate the new slider
-        self.root.minsize(1200, 700)
+        self.root.title("Custom Contrast Stretching GUI by github.com/kaanaldemir")  # Updated title
+        self.root.geometry("1325x980")  # Increased width to accommodate the new slider
+        self.root.minsize(980, 980)
 
         # Initialize color palette
         self.colors = {
@@ -47,7 +47,7 @@ class ImageProcessorApp:
         self.style.map("TButton",
                        foreground=[('active', self.colors["text"])],
                        background=[('active', self.colors["accent_purple"])])
-
+        
         self.style.configure("TScale", background=self.colors["primary_bg"])
 
         # Define a new style for Inverse Clip Checkbuttons
@@ -204,6 +204,17 @@ class ImageProcessorApp:
         )
         self.blue_value_label.grid(row=1, column=2, padx=5, pady=5, sticky="w")
 
+        # Coefficient Revert Button
+        self.reset_coefficients_button = tk.Button(
+            sliders_frame,
+            text="⟳",  # Unicode rotating arrow
+            command=self.reset_coefficients,
+            width=2,  # Adjust width as needed
+            height=1, # Adjust height as needed
+            state='disabled'  # Disabled initially
+        )
+        self.reset_coefficients_button.grid(row=1, column=3, padx=5, pady=5, sticky="w")
+
         # Warning Label with fixed row height to prevent layout shift
         self.warning_label = ttk.Label(
             sliders_frame,
@@ -211,7 +222,7 @@ class ImageProcessorApp:
             font=("Arial", 10),
             foreground=self.colors["warning"]
         )
-        self.warning_label.grid(row=2, column=0, columnspan=3, pady=(0, 0), sticky="w")
+        self.warning_label.grid(row=2, column=0, columnspan=4, pady=(0, 0), sticky="w")
         self.warning_label.configure(anchor='w')  # Align text to the left
 
         # Control Frame: Contrast Stretch Thresholds
@@ -229,7 +240,7 @@ class ImageProcessorApp:
         self.lower_threshold_scale = ttk.Scale(
             control_frame,
             from_=0,
-            to=254,
+            to=254,  # Changed maximum value from 255 to 254
             orient=tk.HORIZONTAL,
             variable=self.lower_threshold_var,
             command=self.apply_custom_stretch,
@@ -297,10 +308,21 @@ class ImageProcessorApp:
         )
         self.inverse_upper_clip_checkbox.grid(row=0, column=7, padx=5, pady=5, sticky="w")
 
+        # Threshold Revert Button
+        self.reset_thresholds_button = tk.Button(
+            control_frame,
+            text="⟳",  # Unicode rotating arrow
+            command=self.reset_thresholds,
+            width=2,  # Adjust width as needed
+            height=1,  # Adjust height as needed
+            state='disabled'  # Disabled initially
+        )
+        self.reset_thresholds_button.grid(row=0, column=8, padx=25, pady=5, sticky="w")
+
         # Status Bar (Optional)
         self.status_bar = ttk.Label(
             self.root,
-            text="Welcome to Fundus Image Processor",
+            text="Welcome to Image Processor",
             anchor='w',
             background=self.colors["secondary_bg"],
             foreground=self.colors["sub_text"]
@@ -448,6 +470,10 @@ class ImageProcessorApp:
         self.inverse_lower_clip_checkbox.config(state='normal')
         self.inverse_upper_clip_checkbox.config(state='normal')
 
+        # Enable revert buttons
+        self.reset_thresholds_button.config(state='normal')
+        self.reset_coefficients_button.config(state='normal')
+
     def process_images(self):
         self.gray_image = ImageOps.grayscale(self.original_image)
         self.green_image = self.original_image.split()[1]
@@ -501,13 +527,13 @@ class ImageProcessorApp:
         inverse_lower = self.inverse_lower_clip_var.get()
         inverse_upper = self.inverse_upper_clip_var.get()
 
-        # Ensure lower <= upper
-        if lower > upper:
-            upper = lower+1
+        # Ensure upper threshold is at least one greater than lower threshold
+        if lower >= upper:
+            upper = min(lower + 1, 255)  # Ensure upper is at least lower + 1 and does not exceed 255
             self.upper_threshold_var.set(upper)
             self.upper_threshold_value_label.config(text=f"{upper}")
-            self.status_bar.config(text="Upper Threshold adjusted to match Lower Threshold.")
-            logging.warning("Upper Threshold was less than Lower Threshold. Adjusted Upper Threshold to match Lower Threshold.")
+            self.status_bar.config(text="Upper Threshold adjusted to be at least one higher than Lower Threshold.")
+            logging.warning("Upper Threshold was less than or equal to Lower Threshold. Adjusted Upper Threshold to be at least one higher.")
         else:
             self.status_bar.config(text="Applying custom contrast stretch.")
 
@@ -749,6 +775,25 @@ class ImageProcessorApp:
         create_tooltip(self.upper_threshold_scale, "Set the upper threshold for contrast stretching. Pixels above this value will be clipped.")
         create_tooltip(self.inverse_lower_clip_checkbox, "Inverse the clipping behavior for the lower threshold.")
         create_tooltip(self.inverse_upper_clip_checkbox, "Inverse the clipping behavior for the upper threshold.")
+        create_tooltip(self.reset_thresholds_button, "Reset Lower and Upper Thresholds to 128 and 255 respectively.")
+        create_tooltip(self.reset_coefficients_button, "Reset Red and Blue Coefficients to 0.500.")
+
+    # Callback to reset thresholds to 128 and 255
+    def reset_thresholds(self):
+        self.lower_threshold_var.set(128)
+        self.upper_threshold_var.set(255)
+        self.apply_custom_stretch()  # Call this to apply the reset values
+        self.status_bar.config(text="Thresholds reset to 128 (Lower) and 255 (Upper).")
+        logging.info("Thresholds reset to 128 (Lower) and 255 (Upper).")
+
+    # Callback to reset red and blue coefficients to 0.500
+    def reset_coefficients(self):
+        self.red_var.set(0.500)
+        self.blue_var.set(0.500)
+        self.update_grayscale_no_g()  # Call this to apply the reset values
+        self.status_bar.config(text="Red and Blue coefficients reset to 0.500.")
+        logging.info("Red and Blue coefficients reset to 0.500.")
+        
 
 def main():
     root = tk.Tk()
