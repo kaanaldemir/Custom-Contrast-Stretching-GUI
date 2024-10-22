@@ -2,13 +2,18 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 from PIL import Image, ImageTk, ImageOps, __version__ as PILLOW_VERSION
+import logging
+
+# Configure logging
+logging.basicConfig(filename='app.log', level=logging.INFO,
+                    format='%(asctime)s:%(levelname)s:%(message)s')
 
 class ImageProcessorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Fundus Image Processor")
-        self.root.geometry("1400x900")  # Increased width for better layout
-        self.root.minsize(1000, 700)
+        self.root.geometry("1600x900")  # Increased width to accommodate the new slider
+        self.root.minsize(1200, 700)
 
         # Initialize color palette
         self.colors = {
@@ -42,8 +47,22 @@ class ImageProcessorApp:
         self.style.map("TButton",
                        foreground=[('active', self.colors["text"])],
                        background=[('active', self.colors["accent_purple"])])
-        
+
         self.style.configure("TScale", background=self.colors["primary_bg"])
+
+        # Define a new style for Inverse Clip Checkbuttons
+        self.style.configure("InverseClip.TCheckbutton",
+                             foreground=self.colors["text"],
+                             background=self.colors["secondary_bg"],
+                             font=("Arial", 10))
+        self.style.map("InverseClip.TCheckbutton",
+                       foreground=[('active', self.colors["text"]),
+                                  ('disabled', self.colors["sub_text"])],
+                       background=[('active', self.colors["secondary_bg"]),
+                                   ('disabled', self.colors["primary_bg"])],
+                       indicatorcolor=[('active', self.colors["accent_purple"]),
+                                      ('disabled', self.colors["sub_text"])])
+        # Note: 'indicatorcolor' may not be supported on all platforms/themes
 
         # Initialize image-related attributes
         self.original_image = None
@@ -108,7 +127,16 @@ class ImageProcessorApp:
         left_top_frame = ttk.Frame(top_frame)
         left_top_frame.grid(row=0, column=0, sticky="w")
 
-        load_button = ttk.Button(left_top_frame, text="Load Image", command=self.load_image)
+        # Attempt to load an icon for the load button (optional)
+        try:
+            load_icon_image = Image.open("load_icon.png").resize((20, 20))
+            load_icon = ImageTk.PhotoImage(load_icon_image)
+            load_button = ttk.Button(left_top_frame, text="Load Image", image=load_icon, compound="left", command=self.load_image)
+            load_button.image = load_icon  # Prevent garbage collection
+        except Exception as e:
+            logging.warning(f"Failed to load load_icon.png: {e}")
+            # Fallback to text-only button if icon fails to load
+            load_button = ttk.Button(left_top_frame, text="Load Image", command=self.load_image)
         load_button.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
         indicator_label = ttk.Label(
@@ -127,61 +155,157 @@ class ImageProcessorApp:
         # Red Coefficient Slider
         red_label = ttk.Label(sliders_frame, text="Red Coefficient:", font=("Arial", 10))
         red_label.grid(row=0, column=0, sticky="w")
+        self.red_var = tk.DoubleVar(value=0.5)
+        self.red_var.trace_add("write", self.update_red_label)
         self.red_scale = ttk.Scale(
             sliders_frame,
-            from_=0,
-            to=1000,
+            from_=0.0,
+            to=1.0,
             orient=tk.HORIZONTAL,
+            variable=self.red_var,
             command=self.update_grayscale_no_g,
-            length=200
+            length=200,
+            state='disabled'  # Disabled initially
         )
-        self.red_scale.set(int(self.current_red_coeff * 1000))
         self.red_scale.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        self.red_value_label = ttk.Label(sliders_frame, text=f"{self.red_scale.get():.0f}", font=("Arial", 10), foreground=self.colors["red"])
+        self.red_value_label = ttk.Label(
+            sliders_frame,
+            text=f"{self.red_var.get():.3f}",
+            font=("Arial", 10),
+            foreground=self.colors["red"],
+            width=6,  # Accommodates '1.000'
+            anchor='center'
+        )
         self.red_value_label.grid(row=0, column=2, padx=5, pady=5, sticky="w")
 
         # Blue Coefficient Slider
         blue_label = ttk.Label(sliders_frame, text="Blue Coefficient:", font=("Arial", 10))
         blue_label.grid(row=1, column=0, sticky="w")
+        self.blue_var = tk.DoubleVar(value=0.5)
+        self.blue_var.trace_add("write", self.update_blue_label)
         self.blue_scale = ttk.Scale(
             sliders_frame,
-            from_=0,
-            to=1000,
+            from_=0.0,
+            to=1.0,
             orient=tk.HORIZONTAL,
+            variable=self.blue_var,
             command=self.update_grayscale_no_g,
-            length=200
+            length=200,
+            state='disabled'  # Disabled initially
         )
-        self.blue_scale.set(int(self.current_blue_coeff * 1000))
         self.blue_scale.grid(row=1, column=1, padx=5, pady=5, sticky="w")
-        self.blue_value_label = ttk.Label(sliders_frame, text=f"{self.blue_scale.get():.0f}", font=("Arial", 10), foreground=self.colors["blue"])
+        self.blue_value_label = ttk.Label(
+            sliders_frame,
+            text=f"{self.blue_var.get():.3f}",
+            font=("Arial", 10),
+            foreground=self.colors["blue"],
+            width=6,  # Accommodates '1.000'
+            anchor='center'
+        )
         self.blue_value_label.grid(row=1, column=2, padx=5, pady=5, sticky="w")
 
         # Warning Label with fixed row height to prevent layout shift
-        self.warning_label = ttk.Label(sliders_frame, text="", font=("Arial", 10), foreground=self.colors["warning"])
+        self.warning_label = ttk.Label(
+            sliders_frame,
+            text="",
+            font=("Arial", 10),
+            foreground=self.colors["warning"]
+        )
         self.warning_label.grid(row=2, column=0, columnspan=3, pady=(0, 0), sticky="w")
         self.warning_label.configure(anchor='w')  # Align text to the left
 
-        # Control Frame: Contrast Stretch Threshold
+        # Control Frame: Contrast Stretch Thresholds
         control_frame = ttk.Frame(self.root)
         control_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
-        control_frame.columnconfigure(2, weight=0)  # Column for value label
+        # Updated column configuration to accommodate checkboxes
+        for i in range(8):
+            control_frame.columnconfigure(i, weight=0)
 
-        threshold_label = ttk.Label(control_frame, text="Contrast Stretch Threshold:", font=("Arial", 10))
-        threshold_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        # Lower Threshold Slider
+        lower_threshold_label = ttk.Label(control_frame, text="Lower Threshold:", font=("Arial", 10))
+        lower_threshold_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.lower_threshold_var = tk.IntVar(value=128)  # Set default to 128
+        self.lower_threshold_var.trace_add("write", self.update_lower_threshold_label)
+        self.lower_threshold_scale = ttk.Scale(
+            control_frame,
+            from_=0,
+            to=254,
+            orient=tk.HORIZONTAL,
+            variable=self.lower_threshold_var,
+            command=self.apply_custom_stretch,
+            length=300,
+            state='disabled'  # Disabled initially
+        )
+        self.lower_threshold_scale.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.lower_threshold_value_label = ttk.Label(
+            control_frame,
+            text=f"{self.lower_threshold_var.get()}",
+            font=("Arial", 10),
+            foreground=self.colors["accent_purple"],
+            width=6,  # Accommodates '255'
+            anchor='center'
+        )
+        self.lower_threshold_value_label.grid(row=0, column=2, padx=5, pady=5, sticky="w")
 
-        self.threshold_var = tk.IntVar(value=128)
-        threshold_scale = ttk.Scale(
+        # Inverse Clip Checkbox for Lower Threshold
+        self.inverse_lower_clip_var = tk.BooleanVar(value=False)
+        self.inverse_lower_clip_checkbox = ttk.Checkbutton(
+            control_frame,
+            text="Inverse Clip",
+            variable=self.inverse_lower_clip_var,
+            command=self.apply_custom_stretch,
+            style='InverseClip.TCheckbutton',
+            state='disabled'  # Disabled initially
+        )
+        self.inverse_lower_clip_checkbox.grid(row=0, column=3, padx=5, pady=5, sticky="w")
+
+        # Upper Threshold Slider
+        upper_threshold_label = ttk.Label(control_frame, text="Upper Threshold:", font=("Arial", 10))
+        upper_threshold_label.grid(row=0, column=4, padx=20, pady=5, sticky="w")
+        self.upper_threshold_var = tk.IntVar(value=255)
+        self.upper_threshold_var.trace_add("write", self.update_upper_threshold_label)
+        self.upper_threshold_scale = ttk.Scale(
             control_frame,
             from_=0,
             to=255,
             orient=tk.HORIZONTAL,
-            variable=self.threshold_var,
+            variable=self.upper_threshold_var,
             command=self.apply_custom_stretch,
-            length=300
+            length=300,
+            state='disabled'  # Disabled initially
         )
-        threshold_scale.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        self.threshold_value_label = ttk.Label(control_frame, text=f"{self.threshold_var.get()}", font=("Arial", 10), foreground=self.colors["accent_purple"])
-        self.threshold_value_label.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        self.upper_threshold_scale.grid(row=0, column=5, padx=5, pady=5, sticky="w")
+        self.upper_threshold_value_label = ttk.Label(
+            control_frame,
+            text=f"{self.upper_threshold_var.get()}",
+            font=("Arial", 10),
+            foreground=self.colors["accent_purple"],
+            width=6,  # Accommodates '255'
+            anchor='center'
+        )
+        self.upper_threshold_value_label.grid(row=0, column=6, padx=5, pady=5, sticky="w")
+
+        # Inverse Clip Checkbox for Upper Threshold
+        self.inverse_upper_clip_var = tk.BooleanVar(value=False)
+        self.inverse_upper_clip_checkbox = ttk.Checkbutton(
+            control_frame,
+            text="Inverse Clip",
+            variable=self.inverse_upper_clip_var,
+            command=self.apply_custom_stretch,
+            style='InverseClip.TCheckbutton',
+            state='disabled'  # Disabled initially
+        )
+        self.inverse_upper_clip_checkbox.grid(row=0, column=7, padx=5, pady=5, sticky="w")
+
+        # Status Bar (Optional)
+        self.status_bar = ttk.Label(
+            self.root,
+            text="Welcome to Fundus Image Processor",
+            anchor='w',
+            background=self.colors["secondary_bg"],
+            foreground=self.colors["sub_text"]
+        )
+        self.status_bar.grid(row=4, column=0, sticky="ew")
 
         # Image Display Frame
         self.image_frame = ttk.Frame(self.root)
@@ -216,25 +340,50 @@ class ImageProcessorApp:
         # Add titles with color-coded text
         for col, title in enumerate(original_titles):
             fg_color = self.get_title_color(title)
-            title_label = ttk.Label(self.image_frame, text=title, font=("Arial", 10, "bold"), foreground=fg_color)
+            title_label = ttk.Label(
+                self.image_frame,
+                text=title,
+                font=("Arial", 10, "bold"),
+                foreground=fg_color
+            )
             title_label.grid(row=0, column=col, padx=5, pady=5)
 
         for col, title in enumerate(normalized_titles):
             fg_color = self.get_title_color(title)
-            title_label = ttk.Label(self.image_frame, text=title, font=("Arial", 10, "bold"), foreground=fg_color)
+            title_label = ttk.Label(
+                self.image_frame,
+                text=title,
+                font=("Arial", 10, "bold"),
+                foreground=fg_color
+            )
             title_label.grid(row=2, column=col, padx=5, pady=5)
 
         for col, title in enumerate(custom_titles):
             fg_color = self.get_title_color(title)
-            title_label = ttk.Label(self.image_frame, text=title, font=("Arial", 10, "bold"), foreground=fg_color)
+            title_label = ttk.Label(
+                self.image_frame,
+                text=title,
+                font=("Arial", 10, "bold"),
+                foreground=fg_color
+            )
             title_label.grid(row=4, column=col, padx=5, pady=5)
 
         # Create image labels using tk.Label for better alignment control
         for row in [1, 3, 5]:
             for col in range(self.num_columns):
-                label = tk.Label(self.image_frame, relief="solid", anchor='center', bg=self.colors["secondary_bg"], bd=2, highlightthickness=0)
+                label = tk.Label(
+                    self.image_frame,
+                    relief="solid",
+                    anchor='center',
+                    bg=self.colors["secondary_bg"],
+                    bd=2,
+                    highlightthickness=0
+                )
                 label.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
                 self.all_labels.append(label)
+
+        # Optional: Add Tooltips (Uncomment if desired)
+        # self.add_tooltips()
 
     def get_title_color(self, title):
         """
@@ -251,6 +400,18 @@ class ImageProcessorApp:
         else:
             return self.colors["text"]
 
+    def update_red_label(self, *args):
+        self.red_value_label.config(text=f"{self.red_var.get():.3f}")
+
+    def update_blue_label(self, *args):
+        self.blue_value_label.config(text=f"{self.blue_var.get():.3f}")
+
+    def update_lower_threshold_label(self, *args):
+        self.lower_threshold_value_label.config(text=f"{self.lower_threshold_var.get()}")
+
+    def update_upper_threshold_label(self, *args):
+        self.upper_threshold_value_label.config(text=f"{self.upper_threshold_var.get()}")
+
     def load_image(self):
         file_path = filedialog.askopenfilename(
             title="Select Image",
@@ -261,14 +422,31 @@ class ImageProcessorApp:
 
         try:
             self.original_image = Image.open(file_path).convert("RGB")
+            self.status_bar.config(text=f"Loaded image: {file_path}")
+            logging.info(f"Loaded image: {file_path}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load image.\n{e}")
+            logging.error(f"Failed to load image: {file_path} with error: {e}")
             return
+
+        # Enable sliders and checkboxes
+        self.enable_widgets()
 
         self.process_images()
         self.display_images()
         self.update_warning_label()
         self.apply_custom_stretch()
+
+    def enable_widgets(self):
+        # Enable sliders
+        self.red_scale.config(state='normal')
+        self.blue_scale.config(state='normal')
+        self.lower_threshold_scale.config(state='normal')
+        self.upper_threshold_scale.config(state='normal')
+
+        # Enable checkbuttons
+        self.inverse_lower_clip_checkbox.config(state='normal')
+        self.inverse_upper_clip_checkbox.config(state='normal')
 
     def process_images(self):
         self.gray_image = ImageOps.grayscale(self.original_image)
@@ -318,13 +496,38 @@ class ImageProcessorApp:
         if not self.original_image:
             return
 
-        threshold = self.threshold_var.get()
-        self.threshold_value_label.config(text=f"{threshold}")
-        self.gray_custom = self.custom_contrast_stretch(self.gray_normalized, threshold)
-        self.green_custom = self.custom_contrast_stretch(self.green_normalized, threshold)
-        self.red_custom = self.custom_contrast_stretch(self.red_normalized, threshold)
-        self.blue_custom = self.custom_contrast_stretch(self.blue_normalized, threshold)
-        self.gray_no_g_custom = self.custom_contrast_stretch(self.gray_no_g_normalized, threshold)
+        lower = self.lower_threshold_var.get()
+        upper = self.upper_threshold_var.get()
+        inverse_lower = self.inverse_lower_clip_var.get()
+        inverse_upper = self.inverse_upper_clip_var.get()
+
+        # Ensure lower <= upper
+        if lower > upper:
+            upper = lower+1
+            self.upper_threshold_var.set(upper)
+            self.upper_threshold_value_label.config(text=f"{upper}")
+            self.status_bar.config(text="Upper Threshold adjusted to match Lower Threshold.")
+            logging.warning("Upper Threshold was less than Lower Threshold. Adjusted Upper Threshold to match Lower Threshold.")
+        else:
+            self.status_bar.config(text="Applying custom contrast stretch.")
+
+        # Update value labels (handled by trace)
+
+        self.gray_custom = self.custom_contrast_stretch(
+            self.gray_normalized, lower, upper, inverse_lower, inverse_upper
+        )
+        self.green_custom = self.custom_contrast_stretch(
+            self.green_normalized, lower, upper, inverse_lower, inverse_upper
+        )
+        self.red_custom = self.custom_contrast_stretch(
+            self.red_normalized, lower, upper, inverse_lower, inverse_upper
+        )
+        self.blue_custom = self.custom_contrast_stretch(
+            self.blue_normalized, lower, upper, inverse_lower, inverse_upper
+        )
+        self.gray_no_g_custom = self.custom_contrast_stretch(
+            self.gray_no_g_normalized, lower, upper, inverse_lower, inverse_upper
+        )
         self.custom_images = [
             self.gray_custom,
             self.green_custom,
@@ -334,14 +537,35 @@ class ImageProcessorApp:
         ]
         self.display_custom_stretched_images()
 
-    def custom_contrast_stretch(self, image, threshold):
-        if threshold >= 255:
-            return image.point(lambda p: 0)
-        elif threshold <= 0:
-            return image
-        else:
-            lut = [0 if i < threshold else min(int((i - threshold) * 255 / (255 - threshold)), 255) for i in range(256)]
-            return image.point(lut)
+    def custom_contrast_stretch(self, image, lower_threshold, upper_threshold, inverse_lower, inverse_upper):
+        """
+        Apply custom contrast stretching to an image based on lower and upper thresholds.
+        Pixels below lower_threshold are set to 0 (or 255 if inverse_lower is True).
+        Pixels above upper_threshold are set to 255 (or 0 if inverse_upper is True).
+        Pixels between are scaled linearly between 0 and 255.
+        """
+        if upper_threshold == lower_threshold:
+            # Avoid division by zero; set all pixels below threshold to 0 (or 255) and above to 255 (or 0)
+            if inverse_lower:
+                return image.point(lambda p: 255 if p >= lower_threshold else 0)
+            else:
+                return image.point(lambda p: 0 if p < lower_threshold else 255)
+        elif upper_threshold < lower_threshold:
+            # Swap thresholds if necessary
+            lower_threshold, upper_threshold = upper_threshold, lower_threshold
+
+        # Create a lookup table
+        lut = []
+        for i in range(256):
+            if i < lower_threshold:
+                lut.append(255 if inverse_lower else 0)
+            elif i > upper_threshold:
+                lut.append(0 if inverse_upper else 255)
+            else:
+                # Scale between 0 and 255
+                scaled = int((i - lower_threshold) * 255 / (upper_threshold - lower_threshold))
+                lut.append(scaled)
+        return image.point(lut)
 
     def display_custom_stretched_images(self):
         custom_images = [
@@ -364,8 +588,9 @@ class ImageProcessorApp:
         if not self.original_image:
             return
 
-        red_val = self.red_scale.get() / 1000
-        blue_val = self.blue_scale.get() / 1000
+        # Retrieve coefficients directly from sliders (0.0 to 1.0)
+        red_val = self.red_var.get()
+        blue_val = self.blue_var.get()
         self.current_red_coeff = red_val
         self.current_blue_coeff = blue_val
         self.gray_no_g_image = self.original_image.convert(
@@ -378,12 +603,14 @@ class ImageProcessorApp:
             )
         )
         self.gray_no_g_normalized = ImageOps.autocontrast(self.gray_no_g_image)
-        threshold = self.threshold_var.get()
-        self.gray_no_g_custom = self.custom_contrast_stretch(self.gray_no_g_normalized, threshold)
-
-        # Update Red and Blue value labels with appropriate colors
-        self.red_value_label.config(text=f"{self.red_scale.get():.0f}", foreground=self.colors["red"])
-        self.blue_value_label.config(text=f"{self.blue_scale.get():.0f}", foreground=self.colors["blue"])
+        # Apply contrast stretching
+        self.gray_no_g_custom = self.custom_contrast_stretch(
+            self.gray_no_g_normalized,
+            self.lower_threshold_var.get(),
+            self.upper_threshold_var.get(),
+            self.inverse_lower_clip_var.get(),
+            self.inverse_upper_clip_var.get()
+        )
 
         # Update "Grayscale No Green" original image
         img_resized = self.resize_image(self.gray_no_g_image, 250, 250)
@@ -417,8 +644,8 @@ class ImageProcessorApp:
 
     def update_warning_label(self):
         total = self.red_scale.get() + self.blue_scale.get()
-        if total > 1000:
-            self.warning_label.config(text="Warning: Red + Blue coefficients exceed 1000!")
+        if total > 1.0:
+            self.warning_label.config(text="Warning: Red + Blue coefficients exceed 1.0!")
         else:
             self.warning_label.config(text="")  # Empty string keeps the label's height consistent
 
@@ -471,8 +698,11 @@ class ImageProcessorApp:
         if file_path:
             try:
                 image.save(file_path)
+                self.status_bar.config(text=f"Image saved: {file_path}")
+                logging.info(f"Image saved: {file_path}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save image.\n{e}")
+                logging.error(f"Failed to save image: {file_path} with error: {e}")
 
     def resize_image(self, image, max_width, max_height):
         width, height = image.size
@@ -484,6 +714,41 @@ class ImageProcessorApp:
         else:
             resample_filter = Image.ANTIALIAS
         return image.resize(new_size, resample=resample_filter)
+
+    def add_tooltips(self):
+        # Define a tooltip function
+        def create_tooltip(widget, text):
+            tooltip = tk.Toplevel(widget)
+            tooltip.withdraw()
+            tooltip.overrideredirect(True)
+            tooltip_label = tk.Label(
+                tooltip,
+                text=text,
+                background="#333333",
+                foreground="#ffffff",
+                font=("Arial", 10)
+            )
+            tooltip_label.pack()
+
+            def enter(event):
+                x = event.widget.winfo_rootx() + event.widget.winfo_width()
+                y = event.widget.winfo_rooty()
+                tooltip.geometry(f"+{x}+{y}")
+                tooltip.deiconify()
+
+            def leave(event):
+                tooltip.withdraw()
+
+            widget.bind("<Enter>", enter)
+            widget.bind("<Leave>", leave)
+
+        # Apply tooltips to sliders and checkboxes
+        create_tooltip(self.red_scale, "Adjust the red coefficient for grayscale conversion (0.000 to 1.000).")
+        create_tooltip(self.blue_scale, "Adjust the blue coefficient for grayscale conversion (0.000 to 1.000).")
+        create_tooltip(self.lower_threshold_scale, "Set the lower threshold for contrast stretching. Pixels below this value will be clipped.")
+        create_tooltip(self.upper_threshold_scale, "Set the upper threshold for contrast stretching. Pixels above this value will be clipped.")
+        create_tooltip(self.inverse_lower_clip_checkbox, "Inverse the clipping behavior for the lower threshold.")
+        create_tooltip(self.inverse_upper_clip_checkbox, "Inverse the clipping behavior for the upper threshold.")
 
 def main():
     root = tk.Tk()
