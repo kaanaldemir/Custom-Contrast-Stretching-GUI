@@ -16,7 +16,7 @@ class ImageProcessorApp:
         self.root = root
         self.root.title("Custom Contrast Stretching GUI by github.com/kaanaldemir")
         self.root.geometry("1325x980")  # Increased width to accommodate the new slider
-        self.root.minsize(980, 980)
+        self.root.minsize(1275, 980)
         
         # ### Set the window icon ###
         try:
@@ -158,16 +158,8 @@ class ImageProcessorApp:
         left_top_frame = ttk.Frame(top_frame)
         left_top_frame.grid(row=0, column=0, sticky="w")
 
-        # Attempt to load an icon for the load button (optional)
-        try:
-            load_icon_image = Image.open("load_icon.png").resize((20, 20))
-            load_icon = ImageTk.PhotoImage(load_icon_image)
-            load_button = ttk.Button(left_top_frame, text="Load Image", image=load_icon, compound="left", command=self.load_image)
-            load_button.image = load_icon  # Prevent garbage collection
-        except Exception as e:
-            logging.warning(f"Failed to load load_icon.png: {e}")
-            # Fallback to text-only button if icon fails to load
-            load_button = ttk.Button(left_top_frame, text="Load Image", command=self.load_image)
+
+        load_button = ttk.Button(left_top_frame, text="Load Image", command=self.load_image)
         load_button.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
         indicator_label = ttk.Label(
@@ -393,7 +385,7 @@ class ImageProcessorApp:
         )
         self.reset_thresholds_button.grid(row=0, column=8, padx=25, pady=5, sticky="w")
 
-        # Status Bar (Optional)
+        # Status Bar
         self.status_bar = ttk.Label(
             self.root,
             text="Welcome to Image Processor",
@@ -478,8 +470,8 @@ class ImageProcessorApp:
                 label.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
                 self.all_labels.append(label)
 
-        # Optional: Add Tooltips (Uncomment if desired)
-        # self.add_tooltips()
+        # Add Tooltips
+        self.add_tooltips()
 
     def get_title_color(self, title):
         """
@@ -824,15 +816,15 @@ class ImageProcessorApp:
             tooltip_label = tk.Label(
                 tooltip,
                 text=text,
-                background="#333333",
+                background="#803030",
                 foreground="#ffffff",
                 font=("Arial", 10)
             )
             tooltip_label.pack()
 
             def enter(event):
-                x = event.widget.winfo_rootx() + event.widget.winfo_width()
-                y = event.widget.winfo_rooty()
+                x = event.widget.winfo_rootx()
+                y = event.widget.winfo_rooty() + event.widget.winfo_height() + 5
                 tooltip.geometry(f"+{x}+{y}")
                 tooltip.deiconify()
 
