@@ -6,16 +6,15 @@ import logging
 import os
 import sys
 
-
 # Configure logging
-    # logging.basicConfig(filename='app.log', level=logging.INFO,
-                       #  format='%(asctime)s:%(levelname)s:%(message)s')
+logging.basicConfig(filename='app.log', level=logging.INFO,
+                    format='%(asctime)s:%(levelname)s:%(message)s')
 
 class ImageProcessorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Custom Contrast Stretching GUI by github.com/kaanaldemir")
-        self.root.geometry("1325x980")  # Increased width to accommodate the new slider
+        self.root.geometry("1275x980")  # Increased width to accommodate the new slider
         self.root.minsize(1275, 980)
         
         # ### Set the window icon ###
@@ -96,7 +95,8 @@ class ImageProcessorApp:
         # Note: 'indicatorcolor' may not be supported on all platforms/themes
 
         # Initialize image-related attributes
-        self.original_image = None
+        self.original_image_loaded = None  # To store the originally loaded image
+        self.original_image = None         # To store the (possibly inverted) image used for processing
         self.gray_image = None
         self.green_image = None
         self.red_image = None
@@ -141,6 +141,13 @@ class ImageProcessorApp:
         self.current_blue_coeff = 0.500
 
         self.num_columns = 5  # Define number of columns before setup_ui
+
+        # Initialize the invert checkbox variable
+        self.invert_before_var = tk.BooleanVar(value=False)
+
+        # Initialize the preview label variable
+        self.preview_label = None
+
         self.setup_ui()
 
     def setup_ui(self):
@@ -148,32 +155,62 @@ class ImageProcessorApp:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(3, weight=1)  # Image display is in row=2, allow row=3 to expand
 
-        # Top Frame: Load Button, Indicator, Sliders on the Right
+        # Top Frame: Load Button, Indicator, Sliders aligned with image_frame's columns
         top_frame = ttk.Frame(self.root)
         top_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
-        top_frame.columnconfigure(0, weight=1)  # Left side (load button and indicator)
-        top_frame.columnconfigure(1, weight=0)  # Right side (sliders)
+        # Configure top_frame to have 5 columns, matching image_frame
+        for col in range(self.num_columns):
+            top_frame.columnconfigure(col, weight=1)
 
-        # Left Side of Top Frame
-        left_top_frame = ttk.Frame(top_frame)
-        left_top_frame.grid(row=0, column=0, sticky="w")
+        # ### Added: Controls Frame ###
+        controls_frame = ttk.Frame(top_frame)
+        controls_frame.grid(row=0, column=0, columnspan=2, sticky="w")
+        # controls_frame uses columns 0 and 1
 
+        # Invert Before Processing Checkbox
+        self.invert_before_checkbox = ttk.Checkbutton(
+            controls_frame,
+            text="Invert Image",
+            variable=self.invert_before_var,
+            command=self.on_invert_checkbox_toggle,
+            style='InverseClip.TCheckbutton'  # Applied the same style as other invert checkboxes
+        )
+        self.invert_before_checkbox.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
-        load_button = ttk.Button(left_top_frame, text="Load Image", command=self.load_image)
-        load_button.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        # Load Image Button
+        load_button = ttk.Button(controls_frame, text="Load Image", command=self.load_image)
+        load_button.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
+        # Indicator Label
         indicator_label = ttk.Label(
-            left_top_frame,
-            text="Left-click to view full-screen. Right-click to save image.",
+            controls_frame,
+            text="Left-click to view full-screen.\nRight-click to save image.",
             font=("Arial", 10),
             foreground=self.colors["sub_text"]
         )
-        indicator_label.grid(row=0, column=1, padx=20, pady=5, sticky="w")
-        
+        indicator_label.grid(row=0, column=2, padx=35, pady=5, sticky="w")
 
-        # Right Side of Top Frame: Sliders
+        # ### Added: Preview Container ###
+        preview_container = ttk.Frame(top_frame)
+        preview_container.grid(row=0, column=2, sticky="n")
+        preview_container.columnconfigure(0, weight=1)
+        preview_container.rowconfigure(0, weight=1)
+
+        # Create a small preview label in the preview_container
+        self.preview_label = tk.Label(
+            preview_container,
+            relief="solid",
+            bg=self.colors["secondary_bg"],
+            bd=2,
+            highlightthickness=0
+        )
+        self.preview_label.grid(row=0, column=0)
+        self.preview_label.bind("<Button-1>", self.on_preview_left_click)
+        self.preview_label.grid_remove()  # Hide initially
+
+        # ### Added: Sliders Frame ###
         sliders_frame = ttk.Frame(top_frame)
-        sliders_frame.grid(row=0, column=1, padx=20, pady=5, sticky="e")
+        sliders_frame.grid(row=0, column=3, columnspan=2, padx=20, pady=5, sticky="e")
         sliders_frame.columnconfigure(4, weight=0)  # Column for value labels
 
         # ### Converted Red and Blue Coefficient Sliders using tk.Scale ###
@@ -509,9 +546,18 @@ class ImageProcessorApp:
             return
 
         try:
-            self.original_image = Image.open(file_path).convert("RGB")
-            self.status_bar.config(text=f"Loaded image: {file_path}")
-            logging.info(f"Loaded image: {file_path}")
+            # Store the originally loaded image
+            self.original_image_loaded = Image.open(file_path).convert("RGB")
+
+            # Apply inversion if checkbox is selected
+            if self.invert_before_var.get():
+                self.original_image = ImageOps.invert(self.original_image_loaded)
+                self.status_bar.config(text=f"Loaded and inverted image: {file_path}")
+                logging.info(f"Loaded and inverted image: {file_path}")
+            else:
+                self.original_image = self.original_image_loaded
+                self.status_bar.config(text=f"Loaded image: {file_path}")
+                logging.info(f"Loaded image: {file_path}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load image.\n{e}")
             logging.error(f"Failed to load image: {file_path} with error: {e}")
@@ -524,6 +570,9 @@ class ImageProcessorApp:
         self.display_images()
         self.update_warning_label()
         self.apply_custom_stretch()
+
+        # ### Update the Preview Label ###
+        self.update_preview_label()
 
     def enable_widgets(self):
         # Enable sliders
@@ -539,6 +588,37 @@ class ImageProcessorApp:
         # Enable revert buttons
         self.reset_thresholds_button.config(state='normal')
         self.reset_coefficients_button.config(state='normal')
+
+    def on_invert_checkbox_toggle(self):
+        """
+        Callback function when the Invert Before Processing checkbox is toggled.
+        Reprocesses and redisplays the images based on the new inversion state.
+        """
+        if not self.original_image_loaded:
+            return  # No image loaded yet
+
+        try:
+            if self.invert_before_var.get():
+                self.original_image = ImageOps.invert(self.original_image_loaded)
+                self.status_bar.config(text="Image inverted before processing.")
+                logging.info("Image inverted before processing.")
+            else:
+                self.original_image = self.original_image_loaded
+                self.status_bar.config(text="Image loaded without inversion.")
+                logging.info("Image loaded without inversion.")
+
+            # Reprocess and display images
+            self.process_images()
+            self.display_images()
+            self.update_warning_label()
+            self.apply_custom_stretch()
+
+            # ### Update the Preview Label ###
+            # Do NOT update the preview label based on inversion; it should always show the original image
+            # Therefore, no call to update_preview_label() here
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to invert image.\n{e}")
+            logging.error(f"Failed to invert image with error: {e}")
 
     def process_images(self):
         self.gray_image = ImageOps.grayscale(self.original_image)
@@ -842,7 +922,33 @@ class ImageProcessorApp:
         create_tooltip(self.inverse_lower_clip_checkbox, "Inverse the clipping behavior for the lower threshold.")
         create_tooltip(self.inverse_upper_clip_checkbox, "Inverse the clipping behavior for the upper threshold.")
         create_tooltip(self.reset_thresholds_button, "Reset Lower and Upper Thresholds to 128 and 255 respectively.")
-        create_tooltip(self.reset_coefficients_button, "Reset Red and Blue Coefficients to 0.50.")
+        create_tooltip(self.reset_coefficients_button, "Reset Red and Blue coefficients to 0.50.")
+        create_tooltip(self.invert_before_checkbox, "If checked, the image will be inverted before processing.")
+        create_tooltip(self.preview_label, "Left-click to view the original image in full-screen.")
+
+    def on_preview_left_click(self, event):
+        """
+        Callback function for left-click on the preview label to show full-screen.
+        """
+        if self.original_image_loaded:
+            self.show_fullscreen(self.original_image_loaded)
+
+    def update_preview_label(self):
+        """
+        Update the preview label with a small version of the original image.
+        """
+        if self.original_image_loaded:
+            # Resize the image to fit the preview area (e.g., 100x100 pixels)
+            preview_img = self.resize_image(self.original_image_loaded, 100, 100)
+            photo_preview = ImageTk.PhotoImage(preview_img)
+            self.preview_label.configure(image=photo_preview)
+            self.preview_label.image = photo_preview  # Prevent garbage collection
+            self.preview_label.grid()  # Show the preview label
+        else:
+            # If no image is loaded, hide the preview
+            self.preview_label.configure(image='')
+            self.preview_label.image = None
+            self.preview_label.grid_remove()
 
     # Callback to reset thresholds to 128 and 255
     def reset_thresholds(self):
